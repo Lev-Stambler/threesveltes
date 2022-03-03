@@ -1,6 +1,6 @@
 <script lang="ts">
   import Textfield from "@smui/textfield";
-import { getContext } from "svelte";
+  import { getContext } from "svelte";
   import { lines, parameters, scene } from "./store";
 
   let yawn = $parameters.yaw.n;
@@ -14,10 +14,12 @@ import { getContext } from "svelte";
   let distancen = $parameters.distance.n;
   let distanced = $parameters.distance.d;
   let distanceb = $parameters.distance.b;
-  const { open, close } = getContext('simple-modal');
+  let sleepTimeMs = $parameters.sleepTimeMs;
+
+  const { open, close } = getContext("simple-modal");
 
   const setValues = () => {
-    close()
+    close();
     setTimeout(
       () =>
         parameters.set({
@@ -36,6 +38,7 @@ import { getContext } from "svelte";
             d: distanced,
             b: distanceb,
           },
+          sleepTimeMs,
         }),
       500
     );
@@ -59,6 +62,10 @@ import { getContext } from "svelte";
   <Textfield bind:value={distancen} label="Numerator" />
   <Textfield bind:value={distanced} label="Denominator" />
   <Textfield bind:value={distanceb} label="Base" />
+</div>
+<div class="field-group">
+  <h3>Other Parameters</h3>
+  <Textfield bind:value={sleepTimeMs} label="Sleep MS between lines" />
 </div>
 
 <input type="button" value="Refresh Animation" on:click={setValues} />

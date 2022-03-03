@@ -14,10 +14,11 @@ export const parameters = writable({
     b: 10,
   },
   distance: {
-    n: 988,
-    d: 999,
+    n: 8,
+    d: 9,
     b: 10,
   },
+  sleepTimeMs: 10
 });
 
 export const lines = writable([] as Object3D[]);

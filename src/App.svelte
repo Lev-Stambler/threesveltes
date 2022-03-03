@@ -118,9 +118,9 @@
       $lines = [...$lines, l];
 
       pos = newPos;
-      await new Promise((res, rej) => setTimeout(res, 10));
+      await new Promise((res, rej) => setTimeout(res, $parameters.sleepTimeMs));
     }
-    console.log("DONE")
+    console.log("DONE");
   };
   parameters.subscribe((newParams) => {
     running = false;
