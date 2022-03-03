@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Modal from "svelte-simple-modal";
+  import OptionsPopup from "./OptionsPopup.svelte";
   import {
     Canvas,
     Scene,
@@ -22,7 +24,12 @@
     LineSegments,
     LineBasicMaterial,
     Line,
+    Object3D,
   } from "svelthree";
+  import { lines, parameters, scene } from "./store";
+  import { getContext, onMount } from "svelte";
+  import Controls from "./Controls.svelte";
+  import { init } from "svelte/internal";
 
   export function* rationalYieldFn(
     numerator: number,
@@ -37,37 +44,28 @@
     }
   }
 
-  let detStr = "0, 11, 11, 3, 13, 11";
-  let lines: { g: BufferGeometry; pos: [number, number, number] }[] = [];
+  // let detStr =
+  //   (window.location.hash ?? "").split("#")[1]?.split(",").length === 9
+  //     ? window.location.hash.split("#")[1]
+  //     : "423, 999, 10, 6, 17, 10, 8, 9, 10";
+  // console.log(detStr, window.location.hash);
 
   type PosType = [number, number, number];
   let yRotateRad: number = 0;
   let zRotateRad: number = 0;
   let pos: PosType = [0, 0, 0];
+  let running = true;
   const moveUnits = 3;
-  
 
-  // /**
-  //  * @param angle1 - angle in radians around the z axis (first rotation)
-  //  * @param angle2 - rotation around the axis perpendicular to the current vector's
-  //  * projection to the XY plane
-  //  */
-  // const calcRotationVectors = (
-  //   angleZAxis: number,
-  //   angleAroundSelf: number
-  // ): [{ v: Vector3; amount: number }, { v: Vector3; amount: number }] => {
-  //   const r1 = { v: new Vector3(0, 0, 1), amount: angleZAxis };
-  //   let y = Math.sin(angleZAxis);
-  //   let x = Math.cos(angleZAxis);
-  //   const axis2 = new Vector3(x, y, 0);
-  //   return [r1, { v: axis2, amount: angleAroundSelf }];
-  // };
-  // TODO: angles at 45degrees and apart so that zRot and yRot contribute to all 3 axises
-  const calcMoveVec = (curr: PosType, yRot: number, zRot: number): PosType => {
-    const deltaX = Math.sin(zRot) * moveUnits;
-    const deltaY = Math.cos(zRot) * moveUnits;
-    const deltaZ = Math.sin(yRot) * moveUnits;
-    console.log(deltaX, deltaY, deltaZ)
+  const calcMoveVec = (
+    curr: PosType,
+    yRot: number,
+    zRot: number,
+    _moveUnits = moveUnits
+  ): PosType => {
+    const deltaX = Math.sin(zRot) * _moveUnits * Math.cos(yRot);
+    const deltaY = Math.cos(zRot) * _moveUnits * Math.cos(yRot);
+    const deltaZ = Math.sin(yRot) * _moveUnits;
     return [deltaX, deltaY, deltaZ];
   };
 
@@ -77,83 +75,109 @@
 
   let floorGeometry = new PlaneBufferGeometry(20, 20, 1);
   let floorMaterial = new MeshStandardMaterial();
-  let scenecomp: Scene
+  let scenecomp: Scene;
 
-  const start = async () => {
-    const split = detStr.split(",").map((s) => parseInt(s.trim()));
-    if (split.length !== 6) throw `Expected a comma seperated list of size 6`;
-    let [yawN, yawD, yawB, pitchN, pitchD, pitchB] = split as [
-      number,
-      number,
-      number,
-      number,
-      number,
-      number
+  const start = async (initSleep = true) => {
+    let [yawN, yawD, yawB, pitchN, pitchD, pitchB, mn, md, mbase] = [
+      $parameters.yaw.n,
+      $parameters.yaw.d,
+      $parameters.yaw.b,
+      $parameters.pitch.n,
+      $parameters.pitch.d,
+      $parameters.pitch.b,
+      $parameters.distance.n,
+      $parameters.distance.d,
+      $parameters.distance.b,
     ];
 
     const pitchIter = rationalYieldFn(pitchN, pitchD, pitchB);
     const yawIter = rationalYieldFn(yawN, yawD, yawB);
+    const moveAmount = rationalYieldFn(mn, md, mbase);
 
-    await new Promise((res, rej) => setTimeout(res, 1000));
-    while (true) {
-      console.log(pitchIter.next());
-      const [deltaX, deltaY, deltaZ] = calcMoveVec(pos, yRotateRad, zRotateRad);
+    if (initSleep) await new Promise((res, rej) => setTimeout(res, 1000));
+    while (running) {
+      yRotateRad += MathUtils.degToRad((pitchIter.next().value / pitchB) * 360);
+      zRotateRad += MathUtils.degToRad((yawIter.next().value / yawB) * 360);
+      const move = moveAmount.next().value;
+
+      const [deltaX, deltaY, deltaZ] = calcMoveVec(
+        pos,
+        yRotateRad,
+        zRotateRad,
+        move
+      );
       const newPos = [
         pos[0] + deltaX,
         pos[1] + deltaY,
         pos[2] + deltaZ,
       ] as PosType;
-      console.log(yRotateRad, zRotateRad);
-      const points = [
-        new Vector3(...pos),
-        new Vector3(...newPos),
-      ];
+      const points = [new Vector3(...pos), new Vector3(...newPos)];
       const lineGeomertry = new BufferGeometry().setFromPoints(points);
-      scenecomp.getScene().add(new Line(lineGeomertry,lineMaterial))
+      const l = new Line(lineGeomertry, lineMaterial);
+      $scene.add(l);
+      $lines = [...$lines, l];
 
-      yRotateRad = MathUtils.degToRad((pitchIter.next().value / pitchB) * 360);
-      zRotateRad = MathUtils.degToRad((yawIter.next().value / yawB) * 360);
       pos = newPos;
       await new Promise((res, rej) => setTimeout(res, 10));
     }
+    console.log("DONE")
   };
-  start();
+  parameters.subscribe((newParams) => {
+    running = false;
+    if ($scene) $scene.remove(...$lines);
+    pos = [0, 0, 0];
+    $lines = [];
+    yRotateRad = 0;
+    zRotateRad = 0;
+    setTimeout(() => {
+      running = true;
+      start();
+    }, 400);
+  });
+
+  onMount(() => {
+    scene.set(scenecomp.getScene() as Scene);
+  });
 </script>
 
-<Canvas let:sti w={1920} h={1080}>
-  <Scene {sti} bind:this={scenecomp}  let:scene id="scene1" props={{ background: 0xedf2f7 }}>
-    <PerspectiveCamera {scene} id="cam1" pos={[0, 0, 30]} lookAt={[0, 0, 0]} />
-    <AmbientLight {scene} intensity={1.25} />
-    <DirectionalLight
-      {scene}
-      pos={[1, 2, 1]}
-      intensity={0.8}
-      shadowMapSize={512 * 8}
-      castShadow
-    />
+<Modal>
+  <div class="options">
+    <Controls />
+  </div>
+  <Canvas let:sti w={1920} h={1080}>
+    <Scene
+      {sti}
+      bind:this={scenecomp}
+      let:scene
+      id="scene1"
+      props={{ background: 0xedf2f7 }}
+    >
+      <PerspectiveCamera
+        {scene}
+        id="cam1"
+        pos={[0, 0, 30]}
+        lookAt={[0, 0, 0]}
+      />
+      <AmbientLight {scene} intensity={1.25} />
+      <DirectionalLight
+        {scene}
+        pos={[1, 2, 1]}
+        intensity={0.8}
+        shadowMapSize={512 * 8}
+        castShadow
+      />
 
-    <Mesh
-      {scene}
-      geometry={cubeGeometry}
-      material={cubeMaterial}
-      mat={{ roughness: 0.5, metalness: 0.5, color: 0xff3e00 }}
-      {pos}
-      rot={[0, yRotateRad, zRotateRad]}
-      castShadow
-      receiveShadow
-    />
-    {#each lines as line}
       <Mesh
         {scene}
-        geometry={line.g}
-        pos={line.pos}
+        geometry={cubeGeometry}
+        material={cubeMaterial}
+        mat={{ roughness: 0.5, metalness: 0.5, color: 0xff3e00 }}
+        {pos}
         rot={[0, yRotateRad, zRotateRad]}
         castShadow
         receiveShadow
       />
-    {/each}
-
-    <!-- <Mesh
+      <!-- <Mesh
       {scene}
       geometry={floorGeometry}
       material={floorMaterial}
@@ -169,15 +193,26 @@
       receiveShadow
     /> -->
 
-    <OrbitControls {scene} autoRotate enableDamping />
-  </Scene>
+      <OrbitControls {scene} enableDamping />
+    </Scene>
 
-  <WebGLRenderer
-    {sti}
-    sceneId="scene1"
-    camId="cam1"
-    config={{ antialias: true, alpha: true }}
-    enableShadowMap
-    shadowMapType={PCFSoftShadowMap}
-  />
-</Canvas>
+    <WebGLRenderer
+      {sti}
+      sceneId="scene1"
+      camId="cam1"
+      config={{ antialias: true, alpha: true }}
+      enableShadowMap
+      shadowMapType={PCFSoftShadowMap}
+    />
+  </Canvas>
+
+  <style>
+    .options {
+      position: absolute;
+      z-index: 100;
+      top: 15px;
+      left: 15px;
+      padding: 1rem;
+    }
+  </style>
+</Modal>
