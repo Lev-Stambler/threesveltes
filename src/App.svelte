@@ -32,19 +32,9 @@
   import Controls from "./Controls.svelte";
   import { init } from "svelte/internal";
   import OrthographicCamera from "svelthree/src/components/OrthographicCamera.svelte";
-
-  export function* rationalYieldFn(
-    numerator: number,
-    denominator: number,
-    b = 10
-  ): GeneratorFunction<number> {
-    let remainder = numerator;
-    for (;;) {
-      let digit = Math.floor((remainder * b) / denominator);
-      remainder = (remainder * b) % denominator;
-      yield digit;
-    }
-  }
+import { rationalYieldFn } from "./math/rationals";
+import type { PosType } from "./interfaces";
+import { calcChangeInPosVec } from "./math/position";
 
   let screenWidth = window.screen.width;
   let screenHeight = window.screen.height;
@@ -55,80 +45,51 @@
     screenHeight = window.screen.height;
   };
 
-  type PosType = [number, number, number];
   let pichRotateRad: number = 0;
   let tmpRotateRad: number = 0;
   let YawRotateRad: number = 0;
   let pos: PosType = [0, 0, 0];
   let running = true;
-  const moveUnits = 3;
-
-  const calcMoveVec = (
-    curr: PosType,
-    yRot: number,
-    zRot: number,
-    _moveUnits = moveUnits,
-    extra = 0
-  ): PosType => {
-    const deltaX = Math.sin(zRot) * _moveUnits * Math.cos(yRot) * Math.cos(extra);
-    const deltaY = Math.cos(zRot) * _moveUnits * Math.cos(yRot) * Math.cos(extra);
-    const deltaZ = Math.sin(yRot) * _moveUnits;
-    return [deltaX, deltaY, deltaZ];
-  };
 
   let cubeGeometry = new BoxBufferGeometry(1, 1, 1, 1, 1, 1);
   let cubeMaterial = new MeshStandardMaterial();
   let lineMaterial = new LineBasicMaterial({ color: 0x0000ff });
 
-  let floorGeometry = new PlaneBufferGeometry(20, 20, 1);
-  let floorMaterial = new MeshStandardMaterial();
   let scenecomp: Scene;
 
   const start = async (initSleep = true) => {
-    let [yawN, yawD, yawB, pitchN, pitchD, pitchB, mn, md, mbase] = [
-      $parameters.yaw.n,
-      $parameters.yaw.d,
-      $parameters.yaw.b,
-      $parameters.pitch.n,
-      $parameters.pitch.d,
-      $parameters.pitch.b,
-      $parameters.distance.n,
-      $parameters.distance.d,
-      $parameters.distance.b,
-    ];
 
-    const pitchIter = rationalYieldFn(pitchN, pitchD, pitchB);
-    const yawIter = rationalYieldFn(yawN, yawD, yawB);
-    const tmpIter = rationalYieldFn(0, 919, 10);
-    const moveAmount = rationalYieldFn(mn, md, mbase);
+    // const pitchIter = rationalYieldFn($parameters.pitch, pitchD, pitchB);
+    // const yawIter = rationalYieldFn(yawN, yawD, yawB);
+    // const tmpIter = rationalYieldFn(0, 919, 10);
+    // const moveAmount = rationalYieldFn(mn, md, mbase);
 
     if (initSleep) await new Promise((res, rej) => setTimeout(res, 1000));
     while (running) {
-      pichRotateRad += MathUtils.degToRad((pitchIter.next().value / pitchB) * 360);
-      YawRotateRad += MathUtils.degToRad((yawIter.next().value / yawB) * 360);
-      tmpRotateRad += MathUtils.degToRad((tmpIter.next().value / 10) * 360);
+      // pichRotateRad += MathUtils.degToRad((pitchIter.next().value / pitchB) * 360);
+      // YawRotateRad += MathUtils.degToRad((yawIter.next().value / yawB) * 360);
+      // tmpRotateRad += MathUtils.degToRad((tmpIter.next().value / 10) * 360);
 
-      const move = moveAmount.next().value;
+      // const move = moveAmount.next().value;
 
-      const [deltaX, deltaY, deltaZ] = calcMoveVec(
-        pos,
-        pichRotateRad,
-        YawRotateRad,
-        move,
-        tmpRotateRad
-      );
-      const newPos = [
-        pos[0] + deltaX,
-        pos[1] + deltaY,
-        pos[2] + deltaZ,
-      ] as PosType;
-      const points = [new Vector3(...pos), new Vector3(...newPos)];
-      const lineGeomertry = new BufferGeometry().setFromPoints(points);
-      const l = new Line(lineGeomertry, lineMaterial);
-      $scene.add(l);
-      $lines = [...$lines, l];
+      // const [deltaX, deltaY, deltaZ] = calcChangeInPosVec(
+      //   pichRotateRad,
+      //   YawRotateRad,
+      //   move,
+      //   tmpRotateRad
+      // );
+      // const newPos = [
+      //   pos[0] + deltaX,
+      //   pos[1] + deltaY,
+      //   pos[2] + deltaZ,
+      // ] as PosType;
+      // const points = [new Vector3(...pos), new Vector3(...newPos)];
+      // const lineGeomertry = new BufferGeometry().setFromPoints(points);
+      // const l = new Line(lineGeomertry, lineMaterial);
+      // $scene.add(l);
+      // $lines = [...$lines, l];
 
-      pos = newPos;
+      // pos = newPos;
       await new Promise((res, rej) => setTimeout(res, $parameters.sleepTimeMs));
     }
     console.log("DONE");
