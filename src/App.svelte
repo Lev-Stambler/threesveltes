@@ -25,11 +25,13 @@
     LineBasicMaterial,
     Line,
     Object3D,
+    CubeCamera
   } from "svelthree";
   import { lines, parameters, scene } from "./store";
   import { getContext, onMount } from "svelte";
   import Controls from "./Controls.svelte";
   import { init } from "svelte/internal";
+  import OrthographicCamera from "svelthree/src/components/OrthographicCamera.svelte";
 
   export function* rationalYieldFn(
     numerator: number,
@@ -44,15 +46,19 @@
     }
   }
 
-  // let detStr =
-  //   (window.location.hash ?? "").split("#")[1]?.split(",").length === 9
-  //     ? window.location.hash.split("#")[1]
-  //     : "423, 999, 10, 6, 17, 10, 8, 9, 10";
-  // console.log(detStr, window.location.hash);
+  let screenWidth = window.screen.width;
+  let screenHeight = window.screen.height;
+  let aspect = screenWidth / screenHeight;
+
+  const setCanvasDim = () => {
+    screenWidth = window.screen.width;
+    screenHeight = window.screen.height;
+  };
 
   type PosType = [number, number, number];
-  let yRotateRad: number = 0;
-  let zRotateRad: number = 0;
+  let pichRotateRad: number = 0;
+  let tmpRotateRad: number = 0;
+  let YawRotateRad: number = 0;
   let pos: PosType = [0, 0, 0];
   let running = true;
   const moveUnits = 3;
@@ -61,10 +67,11 @@
     curr: PosType,
     yRot: number,
     zRot: number,
-    _moveUnits = moveUnits
+    _moveUnits = moveUnits,
+    extra = 0
   ): PosType => {
-    const deltaX = Math.sin(zRot) * _moveUnits * Math.cos(yRot);
-    const deltaY = Math.cos(zRot) * _moveUnits * Math.cos(yRot);
+    const deltaX = Math.sin(zRot) * _moveUnits * Math.cos(yRot) * Math.cos(extra);
+    const deltaY = Math.cos(zRot) * _moveUnits * Math.cos(yRot) * Math.cos(extra);
     const deltaZ = Math.sin(yRot) * _moveUnits;
     return [deltaX, deltaY, deltaZ];
   };
@@ -92,19 +99,23 @@
 
     const pitchIter = rationalYieldFn(pitchN, pitchD, pitchB);
     const yawIter = rationalYieldFn(yawN, yawD, yawB);
+    const tmpIter = rationalYieldFn(0, 919, 10);
     const moveAmount = rationalYieldFn(mn, md, mbase);
 
     if (initSleep) await new Promise((res, rej) => setTimeout(res, 1000));
     while (running) {
-      yRotateRad += MathUtils.degToRad((pitchIter.next().value / pitchB) * 360);
-      zRotateRad += MathUtils.degToRad((yawIter.next().value / yawB) * 360);
+      pichRotateRad += MathUtils.degToRad((pitchIter.next().value / pitchB) * 360);
+      YawRotateRad += MathUtils.degToRad((yawIter.next().value / yawB) * 360);
+      tmpRotateRad += MathUtils.degToRad((tmpIter.next().value / 10) * 360);
+
       const move = moveAmount.next().value;
 
       const [deltaX, deltaY, deltaZ] = calcMoveVec(
         pos,
-        yRotateRad,
-        zRotateRad,
-        move
+        pichRotateRad,
+        YawRotateRad,
+        move,
+        tmpRotateRad
       );
       const newPos = [
         pos[0] + deltaX,
@@ -127,8 +138,8 @@
     if ($scene) $scene.remove(...$lines);
     pos = [0, 0, 0];
     $lines = [];
-    yRotateRad = 0;
-    zRotateRad = 0;
+    pichRotateRad = 0;
+    YawRotateRad = 0;
     setTimeout(() => {
       running = true;
       start();
@@ -140,11 +151,17 @@
   });
 </script>
 
+<svelte:window on:resize={setCanvasDim} />
 <Modal>
   <div class="options">
     <Controls />
   </div>
-  <Canvas let:sti w={1920} h={1080}>
+  <Canvas
+    let:sti
+    style="width: 100%; height: 100%"
+    w={screenWidth}
+    h={screenHeight}
+  >
     <Scene
       {sti}
       bind:this={scenecomp}
@@ -152,10 +169,11 @@
       id="scene1"
       props={{ background: 0xedf2f7 }}
     >
-      <PerspectiveCamera
+      <OrthographicCamera
         {scene}
+        {aspect}
         id="cam1"
-        pos={[0, 0, 30]}
+        pos={[0, 10, 10]}
         lookAt={[0, 0, 0]}
       />
       <AmbientLight {scene} intensity={1.25} />
@@ -173,26 +191,10 @@
         material={cubeMaterial}
         mat={{ roughness: 0.5, metalness: 0.5, color: 0xff3e00 }}
         {pos}
-        rot={[0, yRotateRad, zRotateRad]}
+        rot={[0, pichRotateRad, YawRotateRad]}
         castShadow
         receiveShadow
       />
-      <!-- <Mesh
-      {scene}
-      geometry={floorGeometry}
-      material={floorMaterial}
-      mat={{
-        roughness: 0.5,
-        metalness: 0.5,
-        side: DoubleSide,
-        color: 0xf7fafc,
-      }}
-      pos={[0, -0.501, 0]}
-      rot={[MathUtils.degToRad(-90), 0, 0]}
-      scale={[1, 1, 1]}
-      receiveShadow
-    /> -->
-
       <OrbitControls {scene} enableDamping />
     </Scene>
 
